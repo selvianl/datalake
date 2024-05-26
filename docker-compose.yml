@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  celery-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery-app
+    env_file:
+      - ./.env
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  db:
+    image: postgres:13-alpine
+    container_name: db
+    volumes:
+      - .volumes/postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    env_file:
+      - ./.env
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    env_file:
+      - ./.env
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: on-failure
+    command: server --address ":9000" --console-address ":9001" /data
+
+  redis:
+    image: "redis:alpine"
+    container_name: redis
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+  celery-beat:
+    build: .
+    container_name: celery-beat
+    command: celery -A tasks beat -l info
+    env_file:
+      - ./.env
+    volumes:
+      - .:/code
+    depends_on:
+      - celery-app
+      - db
+      - minio
+      - redis
+
+volumes:
+  minio-data:
+  db:
+  redis-data:
+
+networks:
+  default:
+    driver: bridge
